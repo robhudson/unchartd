@@ -59,6 +59,7 @@ TODO
 ====
 
 * Implement various charts using d3.js
+
   * Punchcard chart for checkins by date/time
   * Map of brewery location checkins
   * Beers by %ABV
