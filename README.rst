@@ -58,5 +58,9 @@ explore your checkins with Elasticsearch.
 TODO
 ====
 
-* Implement local web app to display checkins.
-* Implement various charts using d3.js.
+* Implement various charts using d3.js
+  * Punchcard chart for checkins by date/time
+  * Map of brewery location checkins
+  * Beers by %ABV
+  * Beers by day of week
+  * Other ideas?

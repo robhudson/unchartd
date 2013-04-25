@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html;charset=utf-8">
+  <title>Unchartd</title>
+  <style>
+    body {
+      font: 14px sans-serif;
+    }
+    .arc path {
+      stroke: #fff;
+    }
+    #legend {
+      float: left;
+      font-size: 20px;
+    }
+    #legend ul {
+      list-style: square;
+    }
+  </style>
+  <link rel="stylesheet" href="https://raw.github.com/shutterstock/rickshaw/master/rickshaw.min.css">
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script src="http://d3js.org/d3.v2.js"></script>
+</head>
+<body>
+<h1>Beer Styles Checked-in</h1>
+<div id="legend"><ul></ul></div>
+<div id="chart"></div>
+
+<script type="text/javascript">
+
+  $(document).ready(function() {
+
+    $.ajax({
+      type: "POST",
+      url: "http://localhost:9200/unchartd/checkins/_search",
+      contentType: "application/json; charset=utf-8",
+      data: JSON.stringify({
+        "query": {
+          "match_all": {}
+        },
+        "facets": {
+          "style": {
+            "terms": {
+              "field": "beer.beer_style.style_facet",
+              "size": "20"
+            }
+          }
+        },
+        "size": 0  // No data, just the facets.
+      }),
+      dataType: "json",
+      processData: false,
+      success: function(json) {
+
+        var data = json.facets.style.terms;
+        var width = 960;
+        var height = 500;
+        var radius = Math.min(width, height) / 2;
+
+        var color = d3.scale.category20c();
+
+        var arc = d3.svg.arc()
+            .outerRadius(radius - 10)
+            .innerRadius(radius - 100);
+
+        var pie = d3.layout.pie()
+            .sort(null)
+            .value(function(d) { return d.count; });
+
+        var svg = d3.select("#chart").append("svg")
+            .attr("width", width)
+            .attr("height", height)
+          .append("g")
+            .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+        var g = svg.selectAll(".arc")
+            .data(pie(data))
+          .enter().append("g")
+            .attr("class", "arc");
+
+        g.append("path")
+            .attr("d", arc)
+            .style("fill", function(d, i) { return color(i); });
+
+        g.append("text")
+            .attr("transform", function(d) { return "translate(" + arc.centroid(d) + ")"; })
+            .attr("dy", ".35em")
+            .style("text-anchor", "middle")
+            .text(function(d) { return d.data.count; });
+
+        var $legend = $('#legend ul');
+        var lis = [];
+        data.forEach(function(d, i) {
+          lis.push($('<li style="color:' + color(i) + '">' + d.term + ' (' + d.count + ')</li>'));
+        });
+        $legend.append(lis);
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

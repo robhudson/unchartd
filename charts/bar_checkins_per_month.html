@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html;charset=utf-8">
+  <title>Unchartd</title>
+  <style>
+    body {
+      font: 14px sans-serif;
+    }
+    .axis path, .axis line {
+      fill: none;
+      stroke: #000;
+      shape-rendering: crispEdges;
+    }
+    .x.axis path {
+      display: none;
+    }
+    .x.axis {
+      font-size: 0.7em;
+    }
+    .bar {
+      fill: steelblue;
+    }
+  </style>
+  <link rel="stylesheet" href="https://raw.github.com/shutterstock/rickshaw/master/rickshaw.min.css">
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script src="http://d3js.org/d3.v2.js"></script>
+</head>
+<body>
+<h1>Beer Checkins per Month</h1>
+<div id="chart" class="chart"></div>
+
+<script type="text/javascript">
+
+  $(document).ready(function() {
+
+    function chart_time_series(elem, data) {
+      /* Expects data of the format:
+
+           var data = [
+             {"time": 1297110663, "count": 6},
+             {"time": 1297110664, "count": 2},
+             ...
+
+         Assumes no missing data points.
+      */
+      data.forEach(function(d) {
+        d.dt = new Date(d.time);
+      });
+
+      var margin = {top: 20, right: 20, bottom: 30, left: 40};
+      var width = 960 - margin.left - margin.right;
+      var height = 500 - margin.top - margin.bottom;
+      var formatDate = d3.time.format("%m/%y");
+      var x = d3.scale.ordinal().rangeRoundBands([0, width], .1);
+      var y = d3.scale.linear().range([height, 0]);
+      var xAxis = d3.svg.axis().scale(x).orient("bottom").tickFormat(formatDate);;
+      var yAxis = d3.svg.axis().scale(y).orient("left");
+
+      var svg = d3.select(elem).append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+      x.domain(data.map(function(d) { return d.dt; }));
+      y.domain([0, d3.max(data, function(d) { return d.count; })]);
+
+      svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + height + ")")
+        .call(xAxis);
+
+      svg.append("g")
+        .attr("class", "y axis")
+        .call(yAxis)
+      .append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 6)
+        .attr("dy", ".71em")
+        .style("text-anchor", "end")
+        .text("Frequency");
+
+      svg.selectAll(".bar")
+        .data(data)
+      .enter().append("rect")
+        .attr("class", "bar")
+        .attr("x", function(d) { return x(d.dt); })
+        .attr("width", x.rangeBand())
+        .attr("y", function(d) { return y(d.count); })
+        .attr("height", function(d) { return height - y(d.count); });
+    }
+
+    $.ajax({
+      type: "POST",
+      url: "http://localhost:9200/unchartd/checkins/_search",
+      contentType: "application/json; charset=utf-8",
+      data: JSON.stringify({
+        "query": {
+          "match_all": {}
+        },
+        "facets": {
+          "facet1": {
+            "date_histogram": {
+              "field": "created_at",
+              "interval": "month"  // year | quarter | month | week, etc.
+            }
+          }
+        },
+        "size": 0  // No data, just the facets.
+      }),
+      dataType: "json",
+      processData: false,
+      success: function(json) {
+        chart_time_series('#chart', json.facets.facet1.entries);
+      }
+    });
+
+  });
+</script>
+
+</body>
+</html>
