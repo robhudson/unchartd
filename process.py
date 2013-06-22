@@ -1,8 +1,9 @@
-import dateutil.parser
 import os
+import sys
 import urllib
 import urlparse
 
+import dateutil.parser
 import pyelasticsearch
 import requests
 
@@ -111,10 +112,14 @@ while (resp.status_code == 200):
     # Query next batch of checkins.
     resp = requests.get(_url(data['response']['pagination']['next_url']))
     print '.',
+    sys.stdout.flush()
 
 
 print
 print "%d checkins imported!" % (
     es.count({}, index=ES_INDEX, doc_type=ES_DOCTYPE)['count'])
 print
-print "Load up the web app or query elasticsearch on your own. Cheers!"
+print "Query your untappd checkins via elasticsearch at this URL:"
+print "http://localhost:9200/%s/%s/" % (ES_INDEX, ES_DOCTYPE)
+print
+print "Or load the included charts in your browser for examples."
