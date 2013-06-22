@@ -12,8 +12,9 @@ Requirements
 
 Unchartd requires:
 
-* pyelasticsearch >= 0.4
-* requests >= 1.0
+* pyelasticsearch
+* python-dateutil
+* requests
 
 
 Installation
