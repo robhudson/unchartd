@@ -42,7 +42,13 @@ except KeyError:
 
 
 try:
-    es.create_index(ES_INDEX)
+    es.create_index(ES_INDEX, {
+        "settings": {
+            "index": {
+                "number_of_replicas": 0
+            }
+        }
+    })
 except pyelasticsearch.exceptions.IndexAlreadyExistsError:
     print "This script was run once before. If you'd like to run it again "
     print "delete the index by running the following:"
@@ -53,21 +59,21 @@ except pyelasticsearch.exceptions.IndexAlreadyExistsError:
 # We override some mapping types to more easily query the data later.
 es.put_mapping(ES_INDEX, ES_DOCTYPE, {
     "checkins": {
-      "properties": {
-        "beer": {
-          "properties": {
-            "beer_style": {
-              "type": "multi_field",
-              "fields": {
-                "beer_style": {"type": "string",
-                                "index": "analyzed"},
-                "style_facet": {"type": "string",
-                                "index": "not_analyzed"}
-              }
+        "properties": {
+            "beer": {
+                "properties": {
+                    "beer_style": {
+                        "type": "multi_field",
+                        "fields": {
+                            "beer_style": {"type": "string",
+                                           "index": "analyzed"},
+                            "style_facet": {"type": "string",
+                                            "index": "not_analyzed"}
+                        }
+                    }
+                }
             }
-          }
         }
-      }
     }
 })
 
