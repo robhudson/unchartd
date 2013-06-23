@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html;charset=utf-8">
+  <title>Unchartd</title>
+  <style>
+  </style>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script src="http://d3js.org/d3.v2.js"></script>
+</head>
+<body>
+<h1>Punchcard of Beer Checkin Times</h1>
+<p><em>Times are UTC</em></p>
+<div id="chart" class="chart"></div>
+
+<script type="text/javascript">
+
+
+  $(document).ready(function() {
+
+    // Data is represented as an object of lists with 7 keys -- 7 days of data
+    // with 24 counts (hours) for each day.
+    var data = {};
+    var days = 7; // 1 = Sunday, 7 = Saturday.
+
+    for (dow = 1; dow <= days; dow++) {
+      // One query per day to facet by the hours.
+      // Note: The data is in UTC so days/times may be shifted.
+      // TODO: Find a way to find the user's time zone via JS and tell
+      //       Elasticsearch to use "pre_zone" to adjust time based calculations.
+      $.ajax({
+        type: "POST",
+        url: "http://localhost:9200/unchartd/checkins/_search",
+        contentType: "application/json; charset=utf-8",
+        data: JSON.stringify({
+          "facets" : {
+            "histo1" : {
+              "histogram" : {
+                "key_script" : "doc[\"created_at\"].date.hourOfDay",
+                "value_script" : "doc[\"created_at\"].value"
+              },
+              "facet_filter": {
+                "script": {
+                  "script": "doc[\"created_at\"].date.dayOfWeek == dow",
+                  "params": {
+                    "dow": dow
+                  }
+                }
+              }
+            }
+          },
+          "size": 0  // No data, just the facets.
+        }),
+        dataType: "json",
+        processData: false,
+        dow: dow,  // so we have this in the success callback.
+        success: function(json) {
+          var entries = json.facets.histo1.entries;
+          var day = []
+          var hour = 0;
+
+          // Elasticsearch doesn't include zero count items in the facet so we
+          // have to jank this up.
+          entry = entries.shift();
+          while (entry) {
+            while (entry.key != hour) {
+              day.push(0);
+              hour++;
+            }
+            day.push(entry.count);
+            if (hour == 23) {
+              break;
+            }
+            hour++;
+            entry = entries.shift();
+          }
+          data[this.dow] = day;
+
+          // Go to great lengths to keep the data in the dow order.
+          if (Object.keys(data).length == 7) {
+            // Convert data to a list.
+            var newdata = [];
+            for (var i = 1; i <= 7; i++) {
+              newdata.push(data[i]);
+            }
+            _punchcard(newdata);
+          }
+        }
+      });
+    }
+
+    function _punchcard(data) {
+      var pane_left = 120, pane_right = 800, width = pane_left + pane_right;
+      var height = 520, margin = 10, i, j, tx, ty, max = 0;
+
+      // X-Axis.
+      var x = d3.scale.linear().domain([0, 23]).
+        range([pane_left + margin, pane_right - 2 * margin]);
+
+      // Y-Axis.
+      var y = d3.scale.linear().domain([0, 6]).
+        range([2 * margin, height - 10 * margin]);
+
+      // The main SVG element.
+      var punchcard = d3.
+        select("#chart").
+        append("svg").
+        attr("width", width - 2 * margin).
+        attr("height", height - 2 * margin).
+        append("g");
+
+      // Hour line markers by day.
+      for (i in y.ticks(7)) {
+        punchcard.
+          append("g").
+          selectAll("line").
+          data([0]).
+          enter().
+          append("line").
+          attr("x1", margin).
+          attr("x2", width - 3 * margin).
+          attr("y1", height - 3 * margin - y(i)).
+          attr("y2", height - 3 * margin - y(i)).
+          style("stroke-width", 1).
+          style("stroke", "#efefef");
+
+        punchcard.
+          append("g").
+          selectAll(".rule").
+          data([0]).
+          enter().
+          append("text").
+          attr("x", margin).
+          attr("y", height - 3 * margin - y(i) - 5).
+          attr("text-anchor", "left").
+          text(["Sunday", "Saturday", "Friday", "Thursday", "Wednesday", "Tuesday", "Monday"][i]);
+
+        punchcard.
+          append("g").
+          selectAll("line").
+          data(x.ticks(24)).
+          enter().
+          append("line").
+          attr("x1", function(d) { return pane_left - 2 * margin + x(d); }).
+          attr("x2", function(d) { return pane_left - 2 * margin + x(d); }).
+          attr("y1", height - 4 * margin - y(i)).
+          attr("y2", height - 3 * margin - y(i)).
+          style("stroke-width", 1).
+          style("stroke", "#ccc");
+      }
+
+      // Hour text markers.
+      punchcard.
+        selectAll(".rule").
+        data(x.ticks(24)).
+        enter().
+        append("text").
+        attr("class", "rule").
+        attr("x", function(d) { return pane_left - 2 * margin + x(d); }).
+        attr("y", height - 3 * margin).
+        attr("text-anchor", "middle").
+        text(function(d) {
+          if (d === 0) {
+            return "12a";
+          } else if (d > 0 && d < 12) {
+            return d;
+          } else if (d === 12) {
+            return "12p";
+          } else if (d > 12 && d <= 24) {
+            return d - 12;
+          }
+        });
+
+      // Data has array where indicy 0 is Monday and 6 is Sunday, however we
+      // draw from the bottom up.
+      data = data.reverse();
+
+      // Find the max value to normalize the size of the circles.
+      for (i = 0; i < data.length; i++) {
+        max = Math.max(max, Math.max.apply(null, data[i]));
+      }
+
+      // Show the circles on the punchcard.
+      for (i = 0; i < data.length; i++) {
+        for (j = 0; j < data[i].length; j++) {
+          punchcard.
+            append("g").
+            selectAll("circle").
+            data([data[i][j]]).
+            enter().
+            append("circle").
+            style("fill", "#888").
+            attr("r", function(d) { return d / max * 14; }).
+            attr("transform", function() {
+                tx = pane_left - 2 * margin + x(j);
+                ty = height - 7 * margin - y(i);
+                return "translate(" + tx + ", " + ty + ")";
+              });
+        }
+      }
+    }
+
+  });
+</script>
+
+</body>
+</html>
