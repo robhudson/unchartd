@@ -4,11 +4,11 @@ import urllib
 import urlparse
 
 import dateutil.parser
-import pyelasticsearch
+import elasticsearch
 import requests
 
 
-es = pyelasticsearch.ElasticSearch('http://localhost:9200')
+es = elasticsearch.Elasticsearch(['localhost:9200'])
 
 
 ES_INDEX = 'unchartd'
@@ -41,23 +41,23 @@ except KeyError:
     exit()
 
 
-try:
-    es.create_index(ES_INDEX, {
-        "settings": {
-            "index": {
-                "number_of_replicas": 0
-            }
-        }
-    })
-except pyelasticsearch.exceptions.IndexAlreadyExistsError:
+if es.indices.exists(ES_INDEX):
     print "This script was run once before. If you'd like to run it again "
     print "delete the index by running the following:"
     print "curl -XDELETE http://localhost:9200/%s" % ES_INDEX
     exit()
 
+es.indices.create(ES_INDEX, {
+    "settings": {
+        "index": {
+            "number_of_replicas": 0
+        }
+    }
+})
+
 
 # We override some mapping types to more easily query the data later.
-es.put_mapping(ES_INDEX, ES_DOCTYPE, {
+es.indices.put_mapping(ES_INDEX, ES_DOCTYPE, {
     "checkins": {
         "properties": {
             "beer": {
@@ -104,7 +104,7 @@ while (resp.status_code == 200):
     items = data['response']['checkins']['items']
 
     if not items:  # Are we out of data?
-        es.refresh(index=ES_INDEX)
+        es.indices.refresh(ES_INDEX)
         break
 
     # Convert string date to isoformat datetime.
@@ -112,8 +112,15 @@ while (resp.status_code == 200):
         items[i]['created_at'] = dateutil.parser.parse(
            item['created_at']).isoformat()
 
+    # pyelasticsearch did this for us but elasticsearch doesn't.
+    body = []
+    action = {'index': {'_index': ES_INDEX, '_type': ES_DOCTYPE}}
+    for doc in items:
+        body.append(action)
+        body.append(doc)
+
     # Index into elasticsearch.
-    es.bulk_index(ES_INDEX, ES_DOCTYPE, items)
+    es.bulk(body, ES_INDEX, ES_DOCTYPE)
 
     # Query next batch of checkins.
     resp = requests.get(_url(data['response']['pagination']['next_url']))
@@ -123,7 +130,7 @@ while (resp.status_code == 200):
 
 print
 print "%d checkins imported!" % (
-    es.count({}, index=ES_INDEX, doc_type=ES_DOCTYPE)['count'])
+    es.count(ES_INDEX, ES_DOCTYPE)['count'])
 print
 print "Query your untappd checkins via elasticsearch at this URL:"
 print "http://localhost:9200/%s/%s/" % (ES_INDEX, ES_DOCTYPE)
