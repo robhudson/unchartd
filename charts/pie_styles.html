@@ -38,11 +38,11 @@
         "query": {
           "match_all": {}
         },
-        "facets": {
+        "aggs": {
           "style": {
             "terms": {
               "field": "beer.beer_style.style_facet",
-              "size": "20"
+              "size": 20
             }
           }
         },
@@ -52,7 +52,7 @@
       processData: false,
       success: function(json) {
 
-        var data = json.facets.style.terms;
+        var data = json.aggregations.style.buckets;
         var width = 960;
         var height = 500;
         var radius = Math.min(width, height) / 2;
@@ -65,7 +65,7 @@
 
         var pie = d3.layout.pie()
             .sort(null)
-            .value(function(d) { return d.count; });
+            .value(function(d) { return d.doc_count; });
 
         var svg = d3.select("#chart").append("svg")
             .attr("width", width)
@@ -86,12 +86,12 @@
             .attr("transform", function(d) { return "translate(" + arc.centroid(d) + ")"; })
             .attr("dy", ".35em")
             .style("text-anchor", "middle")
-            .text(function(d) { return d.data.count; });
+            .text(function(d) { return d.data.doc_count; });
 
         var $legend = $('#legend ul');
         var lis = [];
         data.forEach(function(d, i) {
-          lis.push($('<li style="color:' + color(i) + '">' + d.term + ' (' + d.count + ')</li>'));
+          lis.push($('<li style="color:' + color(i) + '">' + d.key + ' (' + d.doc_count + ')</li>'));
         });
         $legend.append(lis);
       }

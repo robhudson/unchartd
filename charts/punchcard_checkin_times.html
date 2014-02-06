@@ -21,73 +21,79 @@
     // Data is represented as an object of lists with 7 keys -- 7 days of data
     // with 24 counts (hours) for each day.
     var data = {};
-    var days = 7; // 1 = Sunday, 7 = Saturday.
 
-    for (dow = 1; dow <= days; dow++) {
-      // One query per day to facet by the hours.
-      // Note: The data is in UTC so days/times may be shifted.
-      // TODO: Find a way to find the user's time zone via JS and tell
-      //       Elasticsearch to use "pre_zone" to adjust time based calculations.
-      $.ajax({
-        type: "POST",
-        url: "http://localhost:9200/unchartd/checkins/_search",
-        contentType: "application/json; charset=utf-8",
-        data: JSON.stringify({
-          "facets" : {
-            "histo1" : {
-              "histogram" : {
-                "key_script" : "doc[\"created_at\"].date.hourOfDay",
-                "value_script" : "doc[\"created_at\"].value"
+    // Note: The data is in UTC so days/times may be shifted.
+    // TODO: Find a way to find the user's time zone via JS and tell
+    //       Elasticsearch to use "pre_zone" to adjust time based calculations.
+    $.ajax({
+      type: "POST",
+      url: "http://localhost:9200/unchartd/checkins/_search",
+      contentType: "application/json; charset=utf-8",
+      data: JSON.stringify(
+        {
+          "aggs" : {
+            "dow" : {
+              // Using range because some script values come back as: -1.
+              "range" : {
+                "script" : "doc[\"created_at\"].date.dayOfWeek",
+                "ranges": [
+                  {"from": 1, "to": 2},
+                  {"from": 2, "to": 3},
+                  {"from": 3, "to": 4},
+                  {"from": 4, "to": 5},
+                  {"from": 5, "to": 6},
+                  {"from": 6, "to": 7},
+                  {"from": 7}
+                ]
               },
-              "facet_filter": {
-                "script": {
-                  "script": "doc[\"created_at\"].date.dayOfWeek == dow",
-                  "params": {
-                    "dow": dow
+              "aggregations": {
+                "hours": {
+                  "terms": {
+                    "field": "created_at",
+                    "script": "doc[\"created_at\"].date.hourOfDay"
                   }
                 }
               }
             }
           },
           "size": 0  // No data, just the facets.
-        }),
-        dataType: "json",
-        processData: false,
-        dow: dow,  // so we have this in the success callback.
-        success: function(json) {
-          var entries = json.facets.histo1.entries;
-          var day = []
-          var hour = 0;
-
-          // Elasticsearch doesn't include zero count items in the facet so we
-          // have to jank this up.
-          entry = entries.shift();
-          while (entry) {
-            while (entry.key != hour) {
-              day.push(0);
-              hour++;
-            }
-            day.push(entry.count);
-            if (hour == 23) {
-              break;
-            }
-            hour++;
-            entry = entries.shift();
-          }
-          data[this.dow] = day;
-
-          // Go to great lengths to keep the data in the dow order.
-          if (Object.keys(data).length == 7) {
-            // Convert data to a list.
-            var newdata = [];
-            for (var i = 1; i <= 7; i++) {
-              newdata.push(data[i]);
-            }
-            _punchcard(newdata);
-          }
         }
-      });
-    }
+      ),
+      dataType: "json",
+      processData: false,
+      success: function(json) {
+        // convert JSON returned from ES into a format like:
+        // {1: {1: 12, 2: 34, 5: 22},
+        //  2: {...}}
+        // Representing {$dow: {$hour: $count}}.
+        var data = {};
+        var buckets = json.aggregations.dow.buckets;
+
+        for (var i = 0; i < buckets.length; i++) {
+          var bucket = buckets[i];
+          var hours = {};
+          for (var j = 0; j < bucket.hours.buckets.length; j++) {
+            var hour = bucket.hours.buckets[j];
+            hours[hour.key] = hour.doc_count;
+          }
+          data[bucket.from] = hours;
+        }
+
+        // Now that we've collapsed the ES data into an easier format, get it
+        // ready to pass to the punchcard function.
+        var punchdata = []
+        for (var i = 0; i < 7; i++) {
+          var hours = [];
+          for (var j = 0; j < 24; j++) {
+            hours.push(data[i+1][j] || 0);
+          }
+          punchdata.push(hours);
+        }
+
+        // Chart it.
+        _punchcard(punchdata);
+      }
+    });
 
     function _punchcard(data) {
       var pane_left = 120, pane_right = 800, width = pane_left + pane_right;
@@ -199,7 +205,6 @@
         }
       }
     }
-
   });
 </script>
 

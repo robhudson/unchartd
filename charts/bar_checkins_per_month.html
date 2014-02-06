@@ -37,14 +37,14 @@
       /* Expects data of the format:
 
            var data = [
-             {"time": 1297110663, "count": 6},
-             {"time": 1297110664, "count": 2},
+             {"key": 1297110663, "doc_count": 6},
+             {"key": 1297110664, "doc_count": 2},
              ...
 
          Assumes no missing data points.
       */
       data.forEach(function(d) {
-        d.dt = new Date(d.time);
+        d.dt = new Date(d.key);
       });
 
       var margin = {top: 20, right: 20, bottom: 30, left: 40};
@@ -63,7 +63,7 @@
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
       x.domain(data.map(function(d) { return d.dt; }));
-      y.domain([0, d3.max(data, function(d) { return d.count; })]);
+      y.domain([0, d3.max(data, function(d) { return d.doc_count; })]);
 
       svg.append("g")
         .attr("class", "x axis")
@@ -86,8 +86,8 @@
         .attr("class", "bar")
         .attr("x", function(d) { return x(d.dt); })
         .attr("width", x.rangeBand())
-        .attr("y", function(d) { return y(d.count); })
-        .attr("height", function(d) { return height - y(d.count); });
+        .attr("y", function(d) { return y(d.doc_count); })
+        .attr("height", function(d) { return height - y(d.doc_count); });
     }
 
     $.ajax({
@@ -98,8 +98,8 @@
         "query": {
           "match_all": {}
         },
-        "facets": {
-          "facet1": {
+        "aggs": {
+          "checkins": {
             "date_histogram": {
               "field": "created_at",
               "interval": "month"  // year | quarter | month | week, etc.
@@ -111,7 +111,7 @@
       dataType: "json",
       processData: false,
       success: function(json) {
-        chart_time_series('#chart', json.facets.facet1.entries);
+        chart_time_series('#chart', json.aggregations.checkins.buckets);
       }
     });
 
